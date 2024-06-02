@@ -4,11 +4,6 @@ import streamlit as st
 import pandas as pd
 from langchain_experimental.agents import create_pandas_dataframe_agent
 from langchain.chat_models import ChatOpenAI
-from pandasai import SmartDataframe
-from pandasai.responses.response_parser import ResponseParser
-from pandasai.llm import OpenAI
-from pandasai.callbacks import BaseCallback
-import json
 
 
 light = '''
@@ -29,31 +24,6 @@ dark = '''
 
 # Template Configuration
 st.markdown(dark, unsafe_allow_html=True)
-
-class StreamlitResponse(ResponseParser):
-    def __init__(self, context) -> None:
-        super().__init__(context)
-
-    def format_dataframe(self, result):
-        st.dataframe(result["value"])
-        return
-
-    def format_plot(self, result):
-        st.image(result["value"])
-        return
-
-    def format_other(self, result):
-        st.write(result["value"])
-        return
-
-
-class StreamlitCallback(BaseCallback):
-    def __init__(self, container) -> None:
-        """Initialize callback handler"""
-        self.container = container
-
-    def on_code(self, response: str):
-        self.container.code(response)
 
 
 def make_false():
@@ -122,48 +92,38 @@ if __name__ == "__main__":
  
     container = st.container()
 
-    if st.button("Submit"):
-        try:
-            if query == default_text:
+    # Check if both conditions are met to activate the submit button
+    if (uploaded_file_check is None and iris_dataset_flag) or uploaded_file_check is not None:
+        if st.button("Submit"):
+            try:
+                if query == default_text:
 
-                intermediate_steps = ["```python\nimport matplotlib.pyplot as plt\n\nfig, axs = plt.subplots(3, figsize=(10,15))\n\n# Histogram of sepal length\naxs[0].hist(df['sepal_length'], bins=10, color='blue', alpha=0.7)\naxs[0].set_title('Histogram of Sepal Length')\n\n# Scatter plot of sepal width vs petal length\naxs[1].scatter(df['sepal_width'], df['petal_length'], color='green', alpha=0.7)\naxs[1].set_title('Scatter Plot of Sepal Width vs Petal Length')\naxs[1].set_xlabel('Sepal Width')\naxs[1].set_ylabel('Petal Length')\n\n# Bar plot of species count\nspecies_count = df['species'].value_counts()\naxs[2].bar(species_count.index, species_count.values, color='red', alpha=0.7)\naxs[2].set_title('Bar Plot of Species Count')\n\nplt.tight_layout()\nplt.show()\n```"]
+                    intermediate_steps = ["```python\nimport matplotlib.pyplot as plt\n\nfig, axs = plt.subplots(3, figsize=(10,15))\n\n# Histogram of sepal length\naxs[0].hist(df['sepal_length'], bins=10, color='blue', alpha=0.7)\naxs[0].set_title('Histogram of Sepal Length')\n\n# Scatter plot of sepal width vs petal length\naxs[1].scatter(df['sepal_width'], df['petal_length'], color='green', alpha=0.7)\naxs[1].set_title('Scatter Plot of Sepal Width vs Petal Length')\naxs[1].set_xlabel('Sepal Width')\naxs[1].set_ylabel('Petal Length')\n\n# Bar plot of species count\nspecies_count = df['species'].value_counts()\naxs[2].bar(species_count.index, species_count.values, color='red', alpha=0.7)\naxs[2].set_title('Bar Plot of Species Count')\n\nplt.tight_layout()\nplt.show()\n```"]
 
-                st.write("Intermediate Steps: ", intermediate_steps)
+                    st.write("Intermediate Steps: ", intermediate_steps)
 
-                st.write("""The code successfully creates three plots: a histogram of sepal length, a scatter plot of sepal width 
-                        vs petal length, and a bar plot of the count of each species. These plots are displayed in a single figure 
-                        with three subplots.""")
+                    st.write("""The code successfully creates three plots: a histogram of sepal length, a scatter plot of sepal width 
+                            vs petal length, and a bar plot of the count of each species. These plots are displayed in a single figure 
+                            with three subplots.""")
 
-            elif query != default_text and openai_api_key:
-                
-                #llm = OpenAI(model_name='gpt-4', temperature=0, verbose=True)
-                #query_engine = SmartDataframe(
-                #    df,
-                #    config={
-                #       "llm": llm,
-                #        "response_parser": StreamlitResponse,
-                #        "callback": StreamlitCallback(container),
-                #    },
-                #)
-                #answer = query_engine.chat(query)
-                #st.write(answer) # Return the result
+                elif query != default_text and openai_api_key:
+                    
+                    llm = ChatOpenAI(model_name='gpt-4', temperature=0, verbose=True)
+                    agent = create_pandas_dataframe_agent(llm, df, verbose=True, return_intermediate_steps=True)
+                    answer = agent.invoke(query)
+                    input_cmds, output = extract_input_output(answer)
+                    st.write("Intermediate Steps: ", input_cmds)
+                    st.write(output) # Return the final answer
 
-                llm = ChatOpenAI(model_name='gpt-4', temperature=0, verbose=True)
-                agent = create_pandas_dataframe_agent(llm, df, verbose=True, return_intermediate_steps=True)
-                answer = agent.invoke(query)
-                input_cmds, output = extract_input_output(answer)
-                st.write("Intermediate Steps: ", input_cmds)
-                st.write(output) # Return the final answer
+                else:
+                    st.error(f"""
+                            Sorry we cannot provide a summary for your prompt. \n
+                            Please provide your OpenAI API key. \n
+                            You can only search for the default prompt for free!
+                            """)
 
-            else:
-                st.error(f"""
-                        Sorry we cannot provide a summary for your prompt. \n
-                        Please provide your OpenAI API key. \n
-                        You can only search for the default prompt for free!
-                        """)
-
-        except Exception as e:
-            st.error(f"An error occurred: {e}")
+            except Exception as e:
+                st.error(f"An error occurred: {e}")
 
     # Unset environment variables
     if 'OPENAI_API_KEY' in os.environ:
